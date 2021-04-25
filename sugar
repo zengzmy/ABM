@@ -1,1 +1,250 @@
 
+globals[
+  mean-of-vision
+  mean-of-metabolism
+  mean-wealth
+]
+
+turtles-own [
+  wealth
+  sugar           ;; the amount of sugar this turtle has
+  metabolism      ;; the amount of sugar that each turtles loses each tick
+  vision          ;; the distance that this turtle can see in the horizontal and vertical directions
+  vision-points   ;; the points that this turtle can see in relative to it's current position (based on vision)
+]
+
+patches-own [
+  manna
+  psugar           ;; the amount of sugar on this patch
+  max-psugar       ;; the maximum amount of sugar that can be on this patch
+]
+
+;;
+;; Setup Procedures
+;;
+
+to setup
+  clear-all
+  create-turtles initial-population / 2 [ blue-turtle-setup ]
+  create-turtles initial-population / 2 [ pink-turtle-setup ]
+
+  setup-patches
+
+  set mean-of-vision mean_vision ; mengyun's code
+  set mean-of-metabolism mean_metabolism ; mengyun's code
+
+  reset-ticks
+
+end
+
+to blue-turtle-setup ;; turtle procedure
+
+  setxy
+  (4 - (blue-distance-to-manna) / 100 + (random (11 - blue-cluster-density)) - (11 - blue-cluster-density) * 0.5)
+  (4 - (blue-distance-to-manna) / 100 + (random (11 - blue-cluster-density)) - (11 - blue-cluster-density) * 0.5)
+  set color 85
+
+  ;move-to one-of patches with [not any? other turtles-here]
+  set wealth random-in-range 15 50
+  ;set sugar random-in-range 5 25
+  set metabolism random-in-range 1 4
+  set vision random-in-range 1 6
+  ;; turtles can look horizontally and vertically up to vision patches
+  ;; but cannot look diagonally at all
+  set vision-points []
+  foreach (range 1 (vision + 1)) [ n ->
+    set vision-points sentence vision-points (list (list 0 n) (list n 0) (list 0 (- n)) (list (- n) 0))
+  ]
+  ;run visualization
+end
+
+to pink-turtle-setup ;; turtle procedure
+
+  setxy
+  (4 - (pink-distance-to-manna) / 100 + (random (11 - pink-cluster-density)) - (11 - pink-cluster-density) * 0.5)
+  (4 - (pink-distance-to-manna) / 100 + (random (11 - pink-cluster-density)) - (11 - pink-cluster-density) * 0.5)
+  set color 125
+
+  ;move-to one-of patches with [not any? other turtles-here]
+  set wealth random-in-range 15 50
+  set sugar random-in-range 5 25
+  set metabolism random-in-range 1 4
+  set vision random-in-range 1 6
+  ;; turtles can look horizontally and vertically up to vision patches
+  ;; but cannot look diagonally at all
+  set vision-points []
+  foreach (range 1 (vision + 1)) [ n ->
+    set vision-points sentence vision-points (list (list 0 n) (list n 0) (list 0 (- n)) (list (- n) 0))
+  ]
+  ;run visualization
+end
+
+to setup-patches
+  let source1 patch 10 10
+  ask source1 [set manna init-manna-amount ]
+  repeat 100 [diffuse manna manna-diffusion-rate]
+  ask patches [set pcolor manna + 40]
+
+end
+
+;;
+;; Runtime Procedures
+;;
+
+to go
+
+  if all? patches [manna = 0] [stop] ; Stop if no more manna left.
+
+  ask turtles [
+    ;move-to one-of ([neighbors] of self) with-max [manna] ; Ask the turtles to move, to forage.
+    turtle-move
+    turtle-eat
+    ;set wealth wealth + manna
+    ;set manna 0
+
+    if wealth <= 0
+      [ die ]
+
+    ;run visualization
+  ]
+  ;plot-cumulative-dist cumulative_of_list reverse [ wealth ] of turtles
+  tick
+end
+
+to turtle-move ;; turtle procedure
+  ;; consider moving to unoccupied patches in our vision, as well as staying at the current patch
+  ;let move-candidates (patch-set patch-here (patches at-points vision-points) with [not any? turtles-here])
+  ;let possible-winners move-candidates with-max [manna]
+  move-to one-of ([neighbors] of self) with-max [manna] ; Ask the turtles to move, to forage.
+  cost-wealth
+  
+  ;if any? possible-winners [
+    ;; if there are any such patches move to one of the patches that is closest
+   ; move-to min-one-of possible-winners [distance myself]
+  ;]
+end
+
+to cost-wealth
+  set wealth wealth - metabolism * 0.1
+end
+
+to turtle-eat ;; turtle procedure
+  ;; metabolize some sugar, and eat all the sugar on the current patch
+  set wealth (wealth  + manna)
+  set manna 0
+end
+
+to patch-recolor ;; patch procedure
+  ;; color patches based on the amount of sugar they have
+  set pcolor (yellow + 4.9 - psugar)
+end
+
+to patch-growback ;; patch procedure
+  ;; gradually grow back all of the sugar for the patch
+  set psugar min (list max-psugar (psugar + 1))
+end
+
+;;
+;; Utilities
+;;
+to plot-cumulative-dist [a]
+  set-current-plot "Reverse Cumulative Wealth"
+  clear-plot
+  set-plot-y-range 0 120
+  set-plot-x-range 0 120
+  set-current-plot-pen "cum-wealth"
+  plot-pen-down
+  foreach a [i -> plot i]
+end
+
+to-report cumulative_of_list [a]
+  let cumlist []
+  let cumsum 0
+  foreach a [elem ->
+    set cumsum (cumsum + elem)
+    set cumlist (lput cumsum cumlist)]
+  report cumlist
+end
+
+; 2 clusters experiment
+to-report blue-wealth-mean
+  report mean [ wealth ] of turtles with [ color = 85 ]
+end
+
+to-report pink-wealth-mean
+  report mean [ wealth ] of turtles with [ color = 125 ]
+end
+
+to-report blue-wealth-std
+  report standard-deviation [ wealth ] of turtles with [ color = 85 ]
+end
+
+to-report pink-wealth-std
+  report standard-deviation [ wealth ] of turtles with [ color = 125 ]
+end
+
+to-report blue-pct-wealth
+  if (sum [ wealth] of turtles) = 0 [ report 0 ]
+  if (sum [ wealth ] of turtles with [ color = 85 ]) < 0 [ report 0 ] ; negative wealth
+  if (sum [ wealth ] of turtles with [ color = 125 ]) < 0 [ report 100 ] ; other turtle has negative wealth
+  report (sum [ wealth ] of turtles with [ color = 85 ]) / (sum [ wealth] of turtles) * 100
+end
+
+to-report pink-pct-wealth
+  if (sum [ wealth] of turtles) = 0 [ report 0 ]
+  if (sum [ wealth ] of turtles with [ color = 125 ]) < 0 [ report 0 ] ; negative wealth
+  if (sum [ wealth ] of turtles with [ color = 85 ]) < 0 [ report 100 ] ; other turtle has negative wealth
+  report (sum [ wealth ] of turtles with [ color = 125 ]) / (sum [ wealth] of turtles) * 100
+end
+
+to-report blue-to-pink-wealth-ratio
+  if (mean [ wealth ] of turtles with [ color = 125 ]) = 0 [ report 0 ]
+  report (mean [ wealth ] of turtles with [ color = 85 ]) / (mean [ wealth ] of turtles with [ color = 125 ])
+end
+
+
+to-report random-in-range [low high]
+  report low + random (high - low + 1)
+end
+
+;;
+;; Visualization Procedures
+;;
+
+to-report mean_vision
+  report mean [vision] of turtles
+end
+to-report mean_metabolism
+  report mean [metabolism] of turtles
+end
+
+to-report good_vision_turtles
+  report (turtles with [(vision > mean-of-vision) ])
+end
+to-report bad_vision_turtles
+  report (turtles with [(vision < mean-of-vision) ])
+end
+
+to-report good_metabolism_turtles
+  report (turtles with [ (metabolism < mean-of-metabolism)])
+end
+to-report bad_metabolism_turtles
+  report (turtles with [ (metabolism > mean-of-metabolism)])
+end
+
+
+to no-visualization ;; turtle procedure
+  set color red
+end
+
+to color-agents-by-vision ;; turtle procedure
+  set color red - (vision - 3.5)
+end
+
+to color-agents-by-metabolism ;; turtle procedure
+  set color red + (metabolism - 2.5)
+end
+
+
+; Copyright 2009 Uri Wilensky.
+; See Info tab for full copyright and license.
